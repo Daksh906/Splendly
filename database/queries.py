@@ -2,7 +2,7 @@ from database.db import get_db
 from datetime import datetime
 
 
-def _is_valid_date(value):
+def is_valid_date(value):
     if not value:
         return False
     try:
@@ -14,8 +14,8 @@ def _is_valid_date(value):
 
 def _validate_range(start_date, end_date):
     """Returns (start_valid, end_valid), or None if the range should match nothing."""
-    start_valid = _is_valid_date(start_date)
-    end_valid = _is_valid_date(end_date)
+    start_valid = is_valid_date(start_date)
+    end_valid = is_valid_date(end_date)
 
     if (start_date and not start_valid) or (end_date and not end_valid):
         return None

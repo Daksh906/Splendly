@@ -1,11 +1,16 @@
+import math
 import sqlite3
+from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, session, abort, flash
 from werkzeug.security import generate_password_hash, check_password_hash
-from database.db import get_db, init_db, seed_db, create_user, get_user_by_email
-from database.queries import get_user_by_id, get_summary_stats, get_recent_transactions, get_category_breakdown
+from database.db import get_db, init_db, seed_db, create_user, get_user_by_email, insert_expense
+from database.queries import get_user_by_id, get_summary_stats, get_recent_transactions, get_category_breakdown, is_valid_date
 
 app = Flask(__name__)
 app.secret_key = "spendly-dev-secret"  # TODO: load from env var in production
+
+EXPENSE_CATEGORIES = ["Food", "Transport", "Bills", "Health", "Entertainment", "Shopping", "Other"]
+MAX_EXPENSE_AMOUNT = 1_000_000
 
 with app.app_context():
     init_db()
@@ -118,9 +123,57 @@ def profile():
     )
 
 
-@app.route("/expenses/add")
+@app.route("/expenses/add", methods=["GET", "POST"])
 def add_expense():
-    return "Add expense — coming in Step 7"
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+
+    if request.method == "GET":
+        today = datetime.now().strftime("%Y-%m-%d")
+        return render_template(
+            "add_expense.html",
+            categories=EXPENSE_CATEGORIES,
+            amount="", category="", date=today, description="",
+        )
+
+    amount_raw = request.form.get("amount", "").strip()
+    category = request.form.get("category", "").strip()
+    date = request.form.get("date", "").strip()
+    description = request.form.get("description", "").strip()
+
+    form_values = {
+        "categories": EXPENSE_CATEGORIES,
+        "amount": amount_raw,
+        "category": category,
+        "date": date,
+        "description": description,
+    }
+
+    try:
+        amount = float(amount_raw)
+    except ValueError:
+        return render_template(
+            "add_expense.html", error="Please enter a valid amount.", **form_values
+        ), 400
+    if not math.isfinite(amount) or amount <= 0 or amount > MAX_EXPENSE_AMOUNT:
+        return render_template(
+            "add_expense.html", error="Amount must be a positive number up to ₹1,000,000.", **form_values
+        ), 400
+
+    if category not in EXPENSE_CATEGORIES:
+        return render_template(
+            "add_expense.html", error="Please choose a valid category.", **form_values
+        ), 400
+
+    if not is_valid_date(date):
+        return render_template(
+            "add_expense.html", error="Please enter a valid date.", **form_values
+        ), 400
+
+    insert_expense(session["user_id"], amount, category, date, description or None)
+
+    flash("Expense added.")
+    return redirect(url_for("profile"))
 
 
 @app.route("/expenses/<int:id>/edit")
